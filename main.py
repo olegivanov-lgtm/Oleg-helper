@@ -12,10 +12,16 @@ Requires: ANTHROPIC_API_KEY environment variable.
 """
 
 import argparse
+import csv
+import json
+import os
 import sys
+from pathlib import Path
 
 from analyzer import analyze_image
 from calculator import calculate
+
+SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 
 def print_results(results):
@@ -138,41 +144,123 @@ def confirm_uncertain_measurements(shape_data):
     return shape_data
 
 
+def process_single(image_path, no_confirm=False):
+    """Process a single image and return results."""
+    print(f"Analyzing image: {image_path} ...")
+    shape_data = analyze_image(image_path)
+    print(f"Detected shape: {shape_data['shape']} (unit: {shape_data.get('unit', '?')})")
+
+    if not no_confirm:
+        shape_data = confirm_uncertain_measurements(shape_data)
+
+    return calculate(shape_data)
+
+
+def process_batch(folder_path, output_csv=None):
+    """Process all images in a folder. Optionally save results to CSV."""
+    folder = Path(folder_path)
+    if not folder.is_dir():
+        print(f"Error: '{folder_path}' is not a directory.", file=sys.stderr)
+        sys.exit(1)
+
+    images = sorted(
+        f for f in folder.iterdir()
+        if f.suffix.lower() in SUPPORTED_EXTENSIONS
+    )
+
+    if not images:
+        print(f"No supported images found in '{folder_path}'.")
+        return
+
+    print(f"Found {len(images)} image(s) in '{folder_path}'.\n")
+
+    all_results = []
+    for i, img in enumerate(images, 1):
+        print(f"\n[{i}/{len(images)}] {img.name}")
+        print("-" * 45)
+        try:
+            results = process_single(str(img), no_confirm=True)
+            results["file"] = img.name
+            all_results.append(results)
+            print_results(results)
+        except Exception as e:
+            print(f"  FAILED: {e}", file=sys.stderr)
+            all_results.append({"file": img.name, "error": str(e)})
+
+    # Summary
+    successful = [r for r in all_results if "error" not in r]
+    failed = [r for r in all_results if "error" in r]
+
+    print("\n" + "=" * 45)
+    print(f"  BATCH COMPLETE: {len(successful)} OK, {len(failed)} failed")
+    print("=" * 45)
+
+    if successful:
+        total_ft2 = sum(r["area"]["ft2"] for r in successful)
+        total_m2 = sum(r["area"]["m2"] for r in successful)
+        print(f"  Total area:  {total_ft2:.2f} sq ft / {total_m2:.4f} sq m")
+
+    # Save CSV if requested
+    if output_csv and successful:
+        with open(output_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["File", "Shape", "Area (sq ft)", "Area (sq m)", "Perimeter (ft)", "Perimeter (m)"])
+            for r in successful:
+                writer.writerow([
+                    r["file"], r["shape"],
+                    f"{r['area']['ft2']:.2f}", f"{r['area']['m2']:.4f}",
+                    f"{r['perimeter']['ft']:.2f}", f"{r['perimeter']['m']:.4f}",
+                ])
+        print(f"\n  Results saved to: {output_csv}")
+
+    print()
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Calculate stretch ceiling area and perimeter from a drawing photo."
+        description="Calculate stretch ceiling area and perimeter from drawing photos."
     )
-    parser.add_argument(
-        "image",
-        help="Path to the ceiling drawing image (jpg, png, gif, webp).",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Output raw JSON instead of formatted text.",
-    )
-    parser.add_argument(
-        "--no-confirm",
-        action="store_true",
-        help="Skip confirmation prompts for uncertain measurements.",
-    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    # Single image mode (default)
+    single = subparsers.add_parser("calc", help="Calculate from a single image.")
+    single.add_argument("image", help="Path to the ceiling drawing image.")
+    single.add_argument("--json", action="store_true", help="Output raw JSON.")
+    single.add_argument("--no-confirm", action="store_true", help="Skip confirmation prompts.")
+
+    # Batch mode
+    batch = subparsers.add_parser("batch", help="Process all images in a folder.")
+    batch.add_argument("folder", help="Path to folder with drawing images.")
+    batch.add_argument("--csv", metavar="FILE", help="Save results to a CSV file.")
+
+    # Web server
+    web = subparsers.add_parser("web", help="Start the web interface.")
+    web.add_argument("--host", default="0.0.0.0", help="Host to bind to (default: 0.0.0.0).")
+    web.add_argument("--port", type=int, default=5000, help="Port to listen on (default: 5000).")
+
     args = parser.parse_args()
 
+    # Default to showing help if no command
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
     try:
-        print(f"Analyzing image: {args.image} ...")
-        shape_data = analyze_image(args.image)
-        print(f"Detected shape: {shape_data['shape']} (unit: {shape_data.get('unit', '?')})")
+        if args.command == "calc":
+            results = process_single(args.image, no_confirm=args.no_confirm)
+            if args.json:
+                print(json.dumps(results, indent=2))
+            else:
+                print_results(results)
 
-        if not args.no_confirm:
-            shape_data = confirm_uncertain_measurements(shape_data)
+        elif args.command == "batch":
+            process_batch(args.folder, output_csv=args.csv)
 
-        results = calculate(shape_data)
-
-        if args.json:
-            import json
-            print(json.dumps(results, indent=2))
-        else:
-            print_results(results)
+        elif args.command == "web":
+            from web_app import create_app
+            app = create_app()
+            print(f"Starting web interface at http://{args.host}:{args.port}")
+            app.run(host=args.host, port=args.port, debug=True)
 
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)

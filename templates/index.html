@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stretch Ceiling Calculator</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 700px;
+            width: 100%;
+            padding: 2rem;
+        }
+        h1 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            color: #38bdf8;
+        }
+        .subtitle {
+            text-align: center;
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+
+        /* Upload area */
+        .upload-area {
+            border: 2px dashed #334155;
+            border-radius: 12px;
+            padding: 3rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 1.5rem;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #38bdf8;
+            background: #1e293b;
+        }
+        .upload-area input { display: none; }
+        .upload-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .upload-text { color: #94a3b8; }
+        .upload-text strong { color: #38bdf8; }
+
+        /* Preview */
+        .preview { text-align: center; margin-bottom: 1.5rem; display: none; }
+        .preview img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .preview .filename {
+            color: #94a3b8;
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #334155;
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Results */
+        .results {
+            display: none;
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .results h2 {
+            color: #38bdf8;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #334155;
+        }
+        .result-row:last-child { border-bottom: none; }
+        .result-label { color: #94a3b8; }
+        .result-value { font-weight: 600; color: #f1f5f9; }
+
+        /* Confidence warnings */
+        .warnings {
+            display: none;
+            background: #422006;
+            border: 1px solid #a16207;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .warnings h3 {
+            color: #fbbf24;
+            margin-bottom: 1rem;
+        }
+        .warn-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .warn-item label {
+            color: #fde68a;
+            min-width: 100px;
+        }
+        .warn-item input {
+            background: #1c1917;
+            border: 1px solid #a16207;
+            color: #fde68a;
+            padding: 0.4rem 0.6rem;
+            border-radius: 6px;
+            width: 120px;
+            font-size: 1rem;
+        }
+        .btn-recalc {
+            background: #a16207;
+            color: #fef3c7;
+            border: none;
+            padding: 0.6rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            margin-top: 0.5rem;
+        }
+        .btn-recalc:hover { background: #ca8a04; }
+
+        /* Error */
+        .error {
+            display: none;
+            background: #450a0a;
+            border: 1px solid #dc2626;
+            color: #fca5a5;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Reset */
+        .btn-reset {
+            display: none;
+            background: #334155;
+            color: #e2e8f0;
+            border: none;
+            padding: 0.7rem 2rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 0 auto;
+        }
+        .btn-reset:hover { background: #475569; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Stretch Ceiling Calculator</h1>
+        <p class="subtitle">Upload a photo of a hand-drawn ceiling plan</p>
+
+        <div class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput" accept="image/*">
+            <div class="upload-icon">&#128247;</div>
+            <p class="upload-text">
+                <strong>Click to upload</strong> or drag and drop<br>
+                JPG, PNG, GIF, WEBP
+            </p>
+        </div>
+
+        <div class="preview" id="preview">
+            <img id="previewImg" alt="Preview">
+            <div class="filename" id="filename"></div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Analyzing your drawing...</p>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="warnings" id="warnings">
+            <h3>&#9888;&#65039; Some measurements were hard to read</h3>
+            <p style="color:#fde68a;margin-bottom:1rem;">Please verify and correct if needed:</p>
+            <div id="warnFields"></div>
+            <button class="btn-recalc" id="btnRecalc">Recalculate</button>
+        </div>
+
+        <div class="results" id="results">
+            <h2>Results</h2>
+            <div class="result-row">
+                <span class="result-label">Shape</span>
+                <span class="result-value" id="resShape">—</span>
+            </div>
+            <div class="result-row">
+                <span class="result-label">Area</span>
+                <span class="result-value" id="resArea">—</span>
+            </div>
+            <div class="result-row">
+                <span class="result-label">Area (metric)</span>
+                <span class="result-value" id="resAreaM">—</span>
+            </div>
+            <div class="result-row">
+                <span class="result-label">Perimeter</span>
+                <span class="result-value" id="resPeri">—</span>
+            </div>
+            <div class="result-row">
+                <span class="result-label">Perimeter (metric)</span>
+                <span class="result-value" id="resPeriM">—</span>
+            </div>
+        </div>
+
+        <button class="btn-reset" id="btnReset">Analyze another drawing</button>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const previewImg = document.getElementById('previewImg');
+        const filename = document.getElementById('filename');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const warnings = document.getElementById('warnings');
+        const warnFields = document.getElementById('warnFields');
+        const errorDiv = document.getElementById('error');
+        const btnReset = document.getElementById('btnReset');
+        const btnRecalc = document.getElementById('btnRecalc');
+
+        let currentRaw = null;  // Store raw shape data for recalculation
+
+        // Upload area click & drag
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
+        });
+
+        function handleFile(file) {
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImg.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+            filename.textContent = file.name;
+
+            // Upload
+            uploadArea.style.display = 'none';
+            loading.style.display = 'block';
+            results.style.display = 'none';
+            warnings.style.display = 'none';
+            errorDiv.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/upload', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    if (data.error) {
+                        showError(data.error);
+                        return;
+                    }
+                    currentRaw = data.raw || null;
+                    showResults(data);
+                    showWarnings(data);
+                    btnReset.style.display = 'block';
+                })
+                .catch(err => {
+                    loading.style.display = 'none';
+                    showError('Failed to analyze image: ' + err.message);
+                });
+        }
+
+        function showResults(data) {
+            document.getElementById('resShape').textContent = data.shape.toUpperCase();
+            document.getElementById('resArea').textContent = data.area.ft2.toFixed(2) + ' sq ft';
+            document.getElementById('resAreaM').textContent = data.area.m2.toFixed(4) + ' sq m';
+            document.getElementById('resPeri').textContent = data.perimeter.ft.toFixed(2) + ' ft';
+            document.getElementById('resPeriM').textContent = data.perimeter.m.toFixed(4) + ' m';
+            results.style.display = 'block';
+        }
+
+        function showWarnings(data) {
+            const conf = data.confidence || {};
+            const unitConf = data.unit_confidence || 'high';
+            const lowKeys = Object.entries(conf).filter(([k, v]) => v === 'low').map(([k]) => k);
+
+            if (lowKeys.length === 0 && unitConf !== 'low') return;
+
+            warnFields.innerHTML = '';
+
+            if (unitConf === 'low' && currentRaw) {
+                const div = document.createElement('div');
+                div.className = 'warn-item';
+                div.innerHTML = `<label>Unit:</label><input type="text" data-field="unit" value="${currentRaw.unit || ''}">`;
+                warnFields.appendChild(div);
+            }
+
+            for (const key of lowKeys) {
+                const val = getNestedValue(currentRaw, key);
+                const div = document.createElement('div');
+                div.className = 'warn-item';
+                div.innerHTML = `<label>${key}:</label><input type="text" data-field="${key}" value="${val !== null ? val : ''}">`;
+                warnFields.appendChild(div);
+            }
+
+            warnings.style.display = 'block';
+        }
+
+        function getNestedValue(raw, key) {
+            if (!raw) return null;
+            if (key.startsWith('rect1_')) return raw.rect1 ? raw.rect1[key.replace('rect1_', '')] : null;
+            if (key.startsWith('rect2_')) return raw.rect2 ? raw.rect2[key.replace('rect2_', '')] : null;
+            if (key.startsWith('vertex_')) {
+                const idx = parseInt(key.replace('vertex_', ''));
+                return raw.vertices ? JSON.stringify(raw.vertices[idx]) : null;
+            }
+            if (key === 'radius') return raw.radius;
+            if (raw.sides && key in raw.sides) return raw.sides[key];
+            return null;
+        }
+
+        function setNestedValue(raw, key, value) {
+            if (key === 'unit') { raw.unit = value; return; }
+            if (key.startsWith('rect1_')) { raw.rect1[key.replace('rect1_', '')] = parseFloat(value); return; }
+            if (key.startsWith('rect2_')) { raw.rect2[key.replace('rect2_', '')] = parseFloat(value); return; }
+            if (key.startsWith('vertex_')) {
+                const idx = parseInt(key.replace('vertex_', ''));
+                raw.vertices[idx] = JSON.parse(value);
+                return;
+            }
+            if (key === 'radius') { raw.radius = parseFloat(value); return; }
+            if (raw.sides && key in raw.sides) { raw.sides[key] = parseFloat(value); return; }
+        }
+
+        // Recalculate with corrected values
+        btnRecalc.addEventListener('click', () => {
+            if (!currentRaw) return;
+
+            const inputs = warnFields.querySelectorAll('input');
+            inputs.forEach(inp => {
+                setNestedValue(currentRaw, inp.dataset.field, inp.value);
+            });
+
+            loading.style.display = 'block';
+            results.style.display = 'none';
+
+            fetch('/recalculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentRaw),
+            })
+                .then(r => r.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    if (data.error) { showError(data.error); return; }
+                    showResults(data);
+                    warnings.style.display = 'none';
+                })
+                .catch(err => {
+                    loading.style.display = 'none';
+                    showError('Recalculation failed: ' + err.message);
+                });
+        });
+
+        function showError(msg) {
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
+            btnReset.style.display = 'block';
+        }
+
+        // Reset
+        btnReset.addEventListener('click', () => {
+            uploadArea.style.display = 'block';
+            preview.style.display = 'none';
+            results.style.display = 'none';
+            warnings.style.display = 'none';
+            errorDiv.style.display = 'none';
+            btnReset.style.display = 'none';
+            loading.style.display = 'none';
+            fileInput.value = '';
+            currentRaw = null;
+        });
+    </script>
+</body>
+</html>
