@@ -4,10 +4,15 @@ Image analysis module using Claude API vision to extract ceiling dimensions from
 
 import base64
 import json
+import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
 import anthropic
+
+# Load .env file from project root
+load_dotenv(Path(__file__).parent / ".env")
 
 SUPPORTED_IMAGE_TYPES = {
     ".jpg": "image/jpeg",
