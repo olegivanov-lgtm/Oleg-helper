@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(npm run lint)",
+      "Bash(npm run test)",
+      "Bash(npm run build)"
+    ],
+    "deny": []
+  }
+}
